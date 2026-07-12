@@ -1,4 +1,5 @@
-﻿using Blog.Common.Models.User;
+﻿using Blog.Common.Exceptions;
+using Blog.Common.Models.User;
 using Blog.Services.Api;
 using Blog.Services.Helpers;
 using Microsoft.AspNetCore.Authorization;
@@ -6,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.API.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/users")]
     [ApiController]
     public class UsersController : ControllerBase
     {
@@ -19,95 +20,59 @@ namespace Blog.API.Controllers
             _userHelper = userHelper;
         }
 
+        // GET api/users -> barcha foydalanuvchilar (login/parol chiqarilmaydi, faqat ochiq ma'lumot)
         [HttpGet]
-        //[Authorize]
         public async Task<IActionResult> GetAllUsers()
         {
-            try
-            {
-                var users = await _userService.GetAllUsers();
-                return Ok(users);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
-
+            var users = await _userService.GetAllUsers();
+            return Ok(users);
         }
 
         [HttpGet("{userId:guid}")]
         [Authorize]
         public async Task<IActionResult> GetUserById(Guid userId)
         {
-            try
-            {
-                var user = await _userService.GetUserById(userId);
-                return Ok(user);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var user = await _userService.GetUserById(userId);
+            return Ok(user);
         }
 
-        [HttpPost("/AddUser")]
+        // POST api/users/register -> ro'yxatdan o'tish, darhol token bilan qaytadi
+        [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] CreateUserModel model)
         {
-            try
-            {
-                var user = await _userService.AddUser(model);
-                return Ok(user);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var result = await _userService.AddUser(model);
+            return Ok(result);
         }
 
-        [HttpPost("/Login")]
-
+        // POST api/users/login -> token bilan qaytadi
+        [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginUserModel model)
         {
-            try
-            {
-                var user = await _userService.Login(model);
-                return Ok(user);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var result = await _userService.Login(model);
+            return Ok(result);
         }
 
-        [HttpPut("{usersId:guid}")]
+        [HttpPut("{userId:guid}")]
         [Authorize]
-        public async Task<IActionResult> UpdataUser(Guid userId, [FromBody] UpdateUserModel model)
+        public async Task<IActionResult> UpdateUser(Guid userId, [FromBody] UpdateUserModel model)
         {
-            try
-            {
-                var user = await _userService.UpdateUser(userId, model);
-                return Ok(user);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            // Faqat o'zining profilini o'zgartira oladi
+            if (_userHelper.UserId != userId)
+                throw new ForbiddenException("Faqat o'zingizning profilingizni o'zgartira olasiz");
+
+            var user = await _userService.UpdateUser(userId, model);
+            return Ok(user);
         }
 
-        [HttpDelete("/Delete")]
+        [HttpDelete("{userId:guid}")]
         [Authorize]
-
-        public async Task<IActionResult> DeleteUser(Guid userid)
+        public async Task<IActionResult> DeleteUser(Guid userId)
         {
-            try
-            {
-                var user = await _userService.DeleteUser(userid);
-                return Ok(user);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            if (_userHelper.UserId != userId)
+                throw new ForbiddenException("Faqat o'zingizning profilingizni o'chira olasiz");
+
+            var message = await _userService.DeleteUser(userId);
+            return Ok(new { message });
         }
     }
 }
