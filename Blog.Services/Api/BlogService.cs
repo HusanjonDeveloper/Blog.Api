@@ -108,7 +108,7 @@ namespace Blog.Services.Api
             if (blog is not null) throw new Exception($"This name \"{name}\" is already exist ");
         }
 
-        private async Task<Data.Entities.Blog> GetBlogById(Guid userId, int blogId)
+        public async Task<Data.Entities.Blog> GetBlogById(Guid userId, int blogId)
         {
             var user = await CheckUser(userId);
             var blog = user.Blogs?.FirstOrDefault(b => b.Id == blogId);
