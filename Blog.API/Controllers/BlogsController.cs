@@ -1,121 +1,83 @@
-﻿using Blog.Common.Models.Blog;
+﻿using Blog.Common.Exceptions;
+using Blog.Common.Models.Blog;
 using Blog.Services.Api;
+using Blog.Services.Helpers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.API.Controllers
 {
-    [Route("api/users/{userId:guid}/[controller]")]
+    [Route("api")]
     [ApiController]
     public class BlogsController : ControllerBase
     {
         private readonly BlogService _blogService;
+        private readonly UserHelper _userHelper;
 
-        public BlogsController(BlogService blogService)
+        public BlogsController(BlogService blogService, UserHelper userHelper)
         {
             _blogService = blogService;
+            _userHelper = userHelper;
         }
 
-        // This Not Releted Blogs
-        [HttpGet("not-related-blogs")]
-        public async Task<IActionResult> GetAllNotRelatedBlogs(Guid userId)
+        // ---- OCHIQ (login shart emas): umumiy blog-feed ----
+
+        [HttpGet("blogs")]
+        public async Task<IActionResult> GetAllBlogs()
         {
-            try
-            {
-                var blog = await _blogService.GetAllNotReletedBlogs(userId);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var blogs = await _blogService.GetAllBlogs();
+            return Ok(blogs);
         }
 
-        [HttpGet("not-related-blogs/{blogId:int}")]
-        public async Task<IActionResult> GetAllNotRelatedBlogById(Guid userId, int blogId)
+        [HttpGet("blogs/{blogId:int}")]
+        public async Task<IActionResult> GetBlogById(int blogId)
         {
-            try
-            {
-                var blog = await _blogService.GetNotRelatedBlogById(userId, blogId);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var blog = await _blogService.GetBlogById(blogId);
+            return Ok(blog);
         }
 
-        // This Releted Blogs
-        [HttpGet]
-        public async Task<IActionResult> GetAllUsersBlogs(Guid userId)
+        // ---- Muayyan foydalanuvchining bloglari ----
+
+        [HttpGet("users/{userId:guid}/blogs")]
+        public async Task<IActionResult> GetUserBlogs(Guid userId)
         {
-            try
-            {
-                var blog = await _blogService.GetAllUserBlogs(userId);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
-
+            var blogs = await _blogService.GetUserBlogs(userId);
+            return Ok(blogs);
         }
 
-        [HttpGet("{blogId:int}")]
-        public async Task<IActionResult> GetUserBlogById(Guid userId, int blogId)
+        [HttpPost("users/{userId:guid}/blogs")]
+        [Authorize]
+        public async Task<IActionResult> AddBlog(Guid userId, [FromBody] CreateBlogModel model)
         {
-            try
-            {
-                var blog = await _blogService.GetRelatedBlogById(userId, blogId);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            EnsureOwner(userId);
+            var blog = await _blogService.AddBlog(userId, model);
+            return Ok(blog);
         }
 
-
-        [HttpPost("/AddBlog")]
-        public async Task<IActionResult> AddUserBlog(Guid userId, [FromBody] CreateBlogModel model)
+        [HttpPut("users/{userId:guid}/blogs/{blogId:int}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateBlog(Guid userId, int blogId, [FromBody] UpdateBlogModel model)
         {
-            try
-            {
-                var blog = await _blogService.AddBlog(userId, model);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            EnsureOwner(userId);
+            var blog = await _blogService.UpdateBlog(userId, blogId, model);
+            return Ok(blog);
         }
 
-        [HttpPut("{blogId:int}")]
-        public async Task<IActionResult> UpdateUserBlog(Guid userId, int blogId, UpdateBlogModel model)
+        [HttpDelete("users/{userId:guid}/blogs/{blogId:int}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteBlog(Guid userId, int blogId)
         {
-            try
-            {
-                var blog = await _blogService.UpdateBlog(userId, blogId, model);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            EnsureOwner(userId);
+            var message = await _blogService.DeleteBlog(userId, blogId);
+            return Ok(new { message });
         }
 
-        [HttpDelete]
-        public async Task<IActionResult> DeleteUserBlog(Guid userId, int blogId)
+        // Token egasi bilan URL'dagi userId bir xil ekanligini tekshiradi -
+        // aks holda A foydalanuvchi B nomidan blog yaratishi/o'chirishi mumkin bo'lardi.
+        private void EnsureOwner(Guid userId)
         {
-            try
-            {
-                var blog = await _blogService.DeleteBlog(userId, blogId);
-                return Ok(blog);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            if (_userHelper.UserId != userId)
+                throw new ForbiddenException("Faqat o'zingizning bloglaringizni boshqarishingiz mumkin");
         }
-
     }
 }
