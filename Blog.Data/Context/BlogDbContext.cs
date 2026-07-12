@@ -4,26 +4,34 @@ namespace Blog.Data.Context
 {
     public class BlogDbContext : DbContext
     {
+        // Connection string endi Program.cs / ServiceExtension orqali appsettings.json'dan
+        // DI konteynerga uzatiladi (AddDbContext). Bu yerda hech qanday hardcoded qiymat yo'q -
+        // shu tufayli loyiha istalgan kompyuterda ishlaydi, faqat bitta konkret laptopda emas.
         public BlogDbContext(DbContextOptions<BlogDbContext> options) : base(options)
         {
-	        Database.EnsureCreated();
-            Database.Migrate();
         }
 
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            optionsBuilder.UseSqlServer("Server=LAPTOP-1FG38VDK;Database=newContext;Integrated Security=true;TrustServerCertificate=True;");
+            // User o'chirilsa - uning bloglari ham o'chadi
+            modelBuilder.Entity<Entities.User>()
+                .HasMany(u => u.Blogs)
+                .WithOne(b => b.User)
+                .HasForeignKey(b => b.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
-           // optionsBuilder.UseLazyLoadingProxies();
+            // Blog o'chirilsa - uning postlari ham o'chadi
+            modelBuilder.Entity<Entities.Blog>()
+                .HasMany(b => b.Posts)
+                .WithOne(p => p.Blog)
+                .HasForeignKey(p => p.BlogId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            base.OnModelCreating(modelBuilder);
         }
 
-        public DbSet<Data.Entities.User> Users { get; set; }
-        public DbSet<Data.Entities.Blog> Blogs { get; set; }
-        public DbSet<Data.Entities.Post> Posts { get; set; }
-
-
-
+        public DbSet<Entities.User> Users { get; set; }
+        public DbSet<Entities.Blog> Blogs { get; set; }
+        public DbSet<Entities.Post> Posts { get; set; }
     }
-
 }
