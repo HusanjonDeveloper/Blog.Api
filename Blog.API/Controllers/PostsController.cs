@@ -1,120 +1,88 @@
-﻿using Blog.Common.Models.Post;
+﻿using Blog.Common.Exceptions;
+using Blog.Common.Models.Post;
 using Blog.Services.Api;
+using Blog.Services.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.API.Controllers
 {
-    [Route("api/users/{userId:guid}/blogs/{blogId:int}/[controller]")]
+    [Route("api")]
     [ApiController]
     public class PostsController : ControllerBase
     {
         private readonly PostService _postService;
+        private readonly UserHelper _userHelper;
 
-        public PostsController(PostService postService)
+        public PostsController(PostService postService, UserHelper userHelper)
         {
             _postService = postService;
+            _userHelper = userHelper;
         }
 
-        [HttpGet("/api/posts")]
+        // ---- OCHIQ: umumiy post-feed ----
+
+        [HttpGet("posts")]
         public async Task<IActionResult> GetAllPosts()
         {
-            try
-            {
-                var post = await _postService.GetAllPosts();
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var posts = await _postService.GetAllPosts();
+            return Ok(posts);
         }
 
-        [HttpGet("/api/posts/{postId:int}")]
-        [Authorize]
+        [HttpGet("posts/{postId:int}")]
         public async Task<IActionResult> GetPostById(int postId)
         {
-            try
-            {
-                var post = await _postService.GetPostById(postId);
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var post = await _postService.GetPostById(postId);
+            return Ok(post);
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAllUserPosts(Guid userId, int blogId)
+        // ---- Muayyan blogga tegishli postlar ----
+
+        [HttpGet("users/{userId:guid}/blogs/{blogId:int}/posts")]
+        public async Task<IActionResult> GetBlogPosts(Guid userId, int blogId)
         {
-            try
-            {
-                var post = await _postService.GetAllPosts(userId, blogId);
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var posts = await _postService.GetBlogPosts(userId, blogId);
+            return Ok(posts);
         }
 
-        [HttpGet("{postId:int}")]
-        public async Task<IActionResult> GetAllUserPostsById(Guid userId, int blogId, int postId)
+        [HttpGet("users/{userId:guid}/blogs/{blogId:int}/posts/{postId:int}")]
+        public async Task<IActionResult> GetBlogPostById(Guid userId, int blogId, int postId)
         {
-            try
-            {
-                var post = await _postService.GetPostById(userId, blogId, postId);
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            var post = await _postService.GetBlogPostById(userId, blogId, postId);
+            return Ok(post);
         }
 
-        [HttpPost]
-        public async Task<IActionResult> AddUserPost(Guid userId, int blogId, [FromBody] CreatePostModel model)
+        [HttpPost("users/{userId:guid}/blogs/{blogId:int}/posts")]
+        [Authorize]
+        public async Task<IActionResult> AddPost(Guid userId, int blogId, [FromBody] CreatePostModel model)
         {
-            try
-            {
-                var post = await _postService.AddPost(userId, blogId, model);
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            EnsureOwner(userId);
+            var post = await _postService.AddPost(userId, blogId, model);
+            return Ok(post);
         }
 
-
-        [HttpPut("{postId:int}")]
-        public async Task<IActionResult> UpdatePost(Guid userId, int blogId, int postId,
-            [FromBody] UpdatePostModel model)
+        [HttpPut("users/{userId:guid}/blogs/{blogId:int}/posts/{postId:int}")]
+        [Authorize]
+        public async Task<IActionResult> UpdatePost(Guid userId, int blogId, int postId, [FromBody] UpdatePostModel model)
         {
-            try
-            {
-                var post = await _postService.UpdatePost(userId, blogId, postId, model);
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            EnsureOwner(userId);
+            var post = await _postService.UpdatePost(userId, blogId, postId, model);
+            return Ok(post);
         }
 
-        [HttpDelete("{postId:int}")]
+        [HttpDelete("users/{userId:guid}/blogs/{blogId:int}/posts/{postId:int}")]
+        [Authorize]
         public async Task<IActionResult> DeletePost(Guid userId, int blogId, int postId)
         {
-            try
-            {
-                var post = await _postService.DeletePost(userId, blogId, postId);
-                return Ok(post);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
+            EnsureOwner(userId);
+            var message = await _postService.DeletePost(userId, blogId, postId);
+            return Ok(new { message });
+        }
+
+        private void EnsureOwner(Guid userId)
+        {
+            if (_userHelper.UserId != userId)
+                throw new ForbiddenException("Faqat o'zingizning postlaringizni boshqarishingiz mumkin");
         }
     }
 }
