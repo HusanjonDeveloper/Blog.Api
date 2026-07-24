@@ -1,4 +1,6 @@
-﻿namespace Blog.Common.Exceptions;
+using Exception = System.Exception;
+
+namespace Blog.Common.Exceptions;
 
 // Foydalanuvchi autentifikatsiyadan o'tgan, lekin bu amalni bajarishga ruxsati yo'q
 // (masalan, boshqa birovning blogini o'chirmoqchi bo'lsa).

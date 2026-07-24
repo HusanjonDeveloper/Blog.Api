@@ -1,4 +1,5 @@
-﻿using Blog.Common.Dtos;
+using Blog.Common.Dtos;
+using Blog.Common.Exceptions;
 using Blog.Common.Models.User;
 using Blog.Common.Statics;
 using Blog.Data.Entities;
@@ -31,63 +32,76 @@ namespace Blog.Services.Api
             return user.ParsToModel();
         }
 
-        public async Task<UserDto> AddUser(CreateUserModel model)
+        // Ro'yxatdan o'tgandan so'ng darhol token qaytaramiz - frontend uchun qulay
+        // (foydalanuvchi ro'yxatdan o'tgach yana alohida login qilishi shart emas).
+        public async Task<AuthResponseDto> AddUser(CreateUserModel model)
         {
-            await IsExist(model.Username!);
+            var normalizedUsername = model.Username!.ToLower();
+            await EnsureUsernameIsFree(normalizedUsername);
 
-            var user = new User()
+            var user = new User
             {
+                Id = Guid.NewGuid(),
                 Firstname = model.Firstname!,
                 Lastname = model.Lastname!,
-                Username = model.Username!,
+                Username = normalizedUsername,
                 Role = ConsString.UserRole
             };
 
-            var passwordHash = new PasswordHasher<User>().HashPassword(user, model.Password);
-            user.PasswordHash = passwordHash;
+            user.PasswordHash = new PasswordHasher<User>().HashPassword(user, model.Password!);
             await _userRepository.Add(user);
-            return user.ParsToModel();
+
+            var token = _jwtTokenService.GenerateToken(user);
+            return ToAuthResponse(user, token);
         }
 
-        public async Task<string> Login(LoginUserModel model)
+        public async Task<AuthResponseDto> Login(LoginUserModel model)
         {
-            var user = await _userRepository.GetByUsername(model.UserName!);
-            if (user == null) throw new Exception("Invalid Username");
+            var user = await _userRepository.GetByUsername(model.UserName!.ToLower());
+
+            // Xavfsizlik uchun: "username topilmadi" va "parol xato" holatlarida
+            // bir xil umumiy xabar qaytaramiz - aks holda tashqi odam qaysi username
+            // ro'yxatdan o'tganini bilib olishi mumkin (username enumeration hujumi).
+            if (user is null)
+                throw new BadRequestException("Login yoki parol noto'g'ri");
 
             var result = new PasswordHasher<User>().VerifyHashedPassword(user, user.PasswordHash, model.Password!);
             if (result == PasswordVerificationResult.Failed)
-                throw new Exception("Password failed");
+                throw new BadRequestException("Login yoki parol noto'g'ri");
+
             var token = _jwtTokenService.GenerateToken(user);
-            return token;
+            return ToAuthResponse(user, token);
         }
 
         public async Task<UserDto> UpdateUser(Guid userId, UpdateUserModel model)
         {
             var user = await _userRepository.GetById(userId);
-            var check = false;
+            var changed = false;
+
             if (!string.IsNullOrWhiteSpace(model.Firstname))
             {
                 user.Firstname = model.Firstname;
-                check = true;
+                changed = true;
             }
 
             if (!string.IsNullOrWhiteSpace(model.Lastname))
             {
                 user.Lastname = model.Lastname;
-                check = true;
+                changed = true;
             }
+
             if (!string.IsNullOrWhiteSpace(model.Username))
             {
-                await IsExist(model.Username);
-                user.Username = model.Username;
-                check = true;
+                var normalized = model.Username.ToLower();
+                if (normalized != user.Username)
+                {
+                    await EnsureUsernameIsFree(normalized);
+                    user.Username = normalized;
+                }
+                changed = true;
             }
 
-            if (check)
-            {
-                await _userRepository.Update(user);
-            }
-
+            if (changed) await _userRepository.Update(user);
             return user.ParsToModel();
         }
 
@@ -95,15 +109,23 @@ namespace Blog.Services.Api
         {
             var user = await _userRepository.GetById(userId);
             await _userRepository.Delete(user);
-            return "User successfully deleted";
+            return "Foydalanuvchi muvaffaqiyatli o'chirildi";
         }
 
-
-        private async Task IsExist(string username)
+        private async Task EnsureUsernameIsFree(string normalizedUsername)
         {
-            var isExist = await _userRepository.GetByUsername(username);
-            if (isExist != null) throw new Exception($"User already exists with this \"{username}\"");
+            var existing = await _userRepository.GetByUsername(normalizedUsername);
+            if (existing is not null)
+                throw new BadRequestException($"\"{normalizedUsername}\" foydalanuvchi nomi allaqachon band");
         }
-    }
 
+        private static AuthResponseDto ToAuthResponse(User user, string token) => new()
+        {
+            Token = token,
+            UserId = user.Id,
+            Username = user.Username,
+            Firstname = user.Firstname,
+            Lastname = user.Lastname
+        };
+    }
 }

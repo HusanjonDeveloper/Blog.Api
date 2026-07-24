@@ -13,6 +13,5 @@ namespace Blog.Common.Models.User
 
         [Required]
         public string? Password { get; set; }
-      
     }
 }

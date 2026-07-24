@@ -1,35 +1,43 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using Blog.Common.Models.JwtOptions;
 using Blog.Data.Entities;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Blog.Services.Api;
 
 public class JwtTokenService
 {
-    private readonly JwtOption _jwtOption = new JwtOption()
+    private readonly JwtOption _jwtOption;
+
+    // Eski kodda bu qiymatlar shu yerda qo'lda (hardcoded) yozilgan edi va
+    // appsettings.json'dagi qiymatlardan butunlay mustaqil edi - ikkitasi
+    // sinxrondan chiqib qolishi mumkin edi. Endi bitta manba: appsettings.json -> JwtOption.
+    public JwtTokenService(IOptions<JwtOption> jwtOption)
     {
-        Issuer = "Blog.API",
-        Audience = "Blog.Client",
-        signinKey = "Default1_Default2_Default3",
-        Minute = 10
-    };
+        _jwtOption = jwtOption.Value;
+    }
 
     public string GenerateToken(User user)
     {
-        var claims = new List<Claim>()
+        var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier,user.Id.ToString()),
-            new  Claim(ClaimTypes.Name, user.Username)
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Role, user.Role ?? "User")
         };
 
-        var signinKey = System.Text.Encoding.UTF32.GetBytes(_jwtOption.signinKey);
+        var signinKey = Encoding.UTF8.GetBytes(_jwtOption.signinKey);
 
-        var security = new JwtSecurityToken(issuer: _jwtOption.Issuer, audience: _jwtOption.Audience, signingCredentials: new SigningCredentials(
-            new SymmetricSecurityKey(signinKey), "HS256"), expires: DateTime.Now.AddMinutes(_jwtOption.Minute), claims: claims);
+        var token = new JwtSecurityToken(
+            issuer: _jwtOption.Issuer,
+            audience: _jwtOption.Audience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(_jwtOption.Minute),
+            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(signinKey), SecurityAlgorithms.HmacSha256));
 
-        var token = new JwtSecurityTokenHandler().WriteToken(security);
-        return token;
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }

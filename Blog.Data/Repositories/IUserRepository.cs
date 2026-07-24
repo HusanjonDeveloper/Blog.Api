@@ -11,7 +11,7 @@ namespace Blog.Data.Repositories
         // Update
         // Delete
 
-        public Task<List<User>?> GetAll();
+        public Task<List<User>> GetAll();
         public Task<User> GetById(Guid id);
         public Task<User?> GetByUsername(string username);
         public Task Add(User user);

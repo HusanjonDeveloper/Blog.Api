@@ -1,7 +1,6 @@
 using Blog.API.Middlewares;
 using Blog.Data.Context;
 using Blog.Services.Api.Extensions;
-using CloudyStack.Infra.ExceptionHandling.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 

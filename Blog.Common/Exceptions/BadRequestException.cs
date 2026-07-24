@@ -1,4 +1,6 @@
-﻿namespace Blog.Common.Exceptions;
+using Exception = System.Exception;
+
+namespace Blog.Common.Exceptions;
 
 // Foydalanuvchi xatosi uchun (masalan: username band, parol noto'g'ri, validatsiya xatosi).
 // Global middleware buni HTTP 400 statusiga aylantiradi.

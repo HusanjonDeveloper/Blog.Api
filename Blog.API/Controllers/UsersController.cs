@@ -1,4 +1,4 @@
-﻿using Blog.Common.Exceptions;
+using Blog.Common.Exceptions;
 using Blog.Common.Models.User;
 using Blog.Services.Api;
 using Blog.Services.Helpers;

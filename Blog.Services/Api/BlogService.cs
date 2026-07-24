@@ -1,6 +1,6 @@
-﻿using Blog.Common.Dtos;
+using Blog.Common.Dtos;
+using Blog.Common.Exceptions;
 using Blog.Common.Models.Blog;
-using Blog.Data.Entities;
 using Blog.Data.Repositories;
 using Blog.Services.Api.Extensions;
 
@@ -17,43 +17,33 @@ namespace Blog.Services.Api
             _userRepository = userRepository;
         }
 
-        //These methods for not related blogs
-        public async Task<List<BlogDto>> GetAllNotReletedBlogs(Guid userId)
+        // Tizimdagi barcha bloglar (ochiq, umumiy feed - login shart emas)
+        public async Task<List<BlogDto>> GetAllBlogs()
         {
-            await CheckUser(userId);
             var blogs = await _blogRepository.GetAll();
             return blogs.ParseModels();
         }
 
-        public async Task<BlogDto> GetNotRelatedBlogById(Guid userId, int blogId)
+        public async Task<BlogDto> GetBlogById(int blogId)
         {
-            await CheckUser(userId);
             var blog = await _blogRepository.GetById(blogId);
             return blog.ParseToModel();
         }
 
-        //These methods for  related to user,  blogs
-        public async Task<List<BlogDto>> GetAllUserBlogs(Guid userId)
+        // Faqat shu foydalanuvchiga tegishli bloglar
+        public async Task<List<BlogDto>> GetUserBlogs(Guid userId)
         {
-            await CheckUser(userId);
-            var blogs = await _blogRepository.GetAll();
-            var relatedBlogs = blogs?.Where(b => b.UserId == userId).ToList();
-            return relatedBlogs.ParseModels();
-        }
-
-        public async Task<BlogDto> GetRelatedBlogById(Guid userId, int blogId)
-        {
-            var blog = await GetBlogById(userId, blogId);
-            return blog.ParseToModel();
+            await EnsureUserExists(userId);
+            var blogs = await _blogRepository.GetByUserId(userId);
+            return blogs.ParseModels();
         }
 
         public async Task<BlogDto> AddBlog(Guid userId, CreateBlogModel model)
         {
-            await CheckUser(userId);
+            await EnsureUserExists(userId);
+            await EnsureNameIsFree(model.Name);
 
-            await IsExist(model.Name);
-
-            Data.Entities.Blog blog = new()
+            var blog = new Data.Entities.Blog
             {
                 Name = model.Name,
                 Description = model.Description,
@@ -65,57 +55,54 @@ namespace Blog.Services.Api
 
         public async Task<BlogDto> UpdateBlog(Guid userId, int blogId, UpdateBlogModel model)
         {
+            var blog = await GetOwnedBlog(userId, blogId);
+            var changed = false;
 
-            var blog = await GetBlogById(userId, blogId);
-
-            var check = false;
-
-            if (!string.IsNullOrWhiteSpace(model.Name))
+            if (!string.IsNullOrWhiteSpace(model.Name) && model.Name != blog.Name)
             {
-                await IsExist(model.Name);
+                await EnsureNameIsFree(model.Name);
                 blog.Name = model.Name;
-                check = true;
+                changed = true;
             }
 
-            if (!string.IsNullOrEmpty(model.Description))
+            if (!string.IsNullOrWhiteSpace(model.Description))
             {
                 blog.Description = model.Description;
-                check = true;
+                changed = true;
             }
 
-            if (check) await _blogRepository.Update(blog);
+            if (changed) await _blogRepository.Update(blog);
             return blog.ParseToModel();
         }
 
         public async Task<string> DeleteBlog(Guid userId, int blogId)
         {
-            var blog = await GetBlogById(userId, blogId);
-
+            var blog = await GetOwnedBlog(userId, blogId);
             await _blogRepository.Delete(blog);
-            return "Deleted successfully";
+            return "Blog muvaffaqiyatli o'chirildi";
         }
 
-
-        private async Task<User> CheckUser(Guid userId)
+        // Blogni to'g'ridan-to'g'ri o'zining ID'si bo'yicha bazadan olib,
+        // keyin egasi shu userId ekanligini tekshiradi.
+        // ESLATMA: eski kodda bu "user.Blogs.FirstOrDefault(...)" orqali qilingan edi,
+        // lekin user.Blogs hech qachon yuklanmagani uchun (Include/lazy-loading yo'q edi)
+        // u har doim null bo'lib, funksiya butunlay ishlamas edi. Endi bevosita
+        // blogni ID orqali olib, egalikni tekshiramiz - ishonchli va tezroq usul.
+        internal async Task<Data.Entities.Blog> GetOwnedBlog(Guid userId, int blogId)
         {
-            var user = await _userRepository.GetById(userId);
-            return user;
-        }
-
-        private async Task IsExist(string name)
-        {
-            var blog = await _blogRepository.GetByName(name);
-            if (blog is not null) throw new Exception($"This name \"{name}\" is already exist ");
-        }
-
-        public async Task<Data.Entities.Blog> GetBlogById(Guid userId, int blogId)
-        {
-            var user = await CheckUser(userId);
-            var blog = user.Blogs?.FirstOrDefault(b => b.Id == blogId);
-            if (blog is null) throw new Exception($"Invalid blogId \"{blogId}\"");
+            var blog = await _blogRepository.GetById(blogId);
+            if (blog.UserId != userId)
+                throw new NotFoundException($"\"{userId}\" foydalanuvchiga tegishli \"{blogId}\" IDli blog topilmadi");
             return blog;
         }
 
+        private async Task EnsureUserExists(Guid userId) => await _userRepository.GetById(userId);
 
+        private async Task EnsureNameIsFree(string name)
+        {
+            var existing = await _blogRepository.GetByName(name);
+            if (existing is not null)
+                throw new BadRequestException($"\"{name}\" nomli blog allaqachon mavjud");
+        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Blog.Common.Dtos;
+using Blog.Common.Dtos;
+using Blog.Common.Exceptions;
 using Blog.Common.Models.Post;
 using Blog.Data.Entities;
 using Blog.Data.Repositories;
@@ -8,53 +9,50 @@ namespace Blog.Services.Api
 {
     public class PostService
     {
-        readonly IPostRepository _postRepository;
-        readonly IUserRepository _userRepository;
-        readonly IBlogRepository _blogRepository;
-        public PostService(IPostRepository postRepository, IUserRepository userRepository, IBlogRepository blogRepository)
+        private readonly IPostRepository _postRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly BlogService _blogService;
+
+        public PostService(IPostRepository postRepository, IUserRepository userRepository, BlogService blogService)
         {
             _postRepository = postRepository;
             _userRepository = userRepository;
-            _blogRepository = blogRepository;
+            _blogService = blogService;
         }
 
-        // These method is not relevant to user and blog
+        // Tizimdagi barcha postlar (ochiq umumiy feed)
         public async Task<List<PostDto>> GetAllPosts()
         {
-            var allPosts = await _postRepository.GetAll();
-            return allPosts.ParseModels();
+            var posts = await _postRepository.GetAll();
+            return posts.ParseModels();
         }
 
         public async Task<PostDto> GetPostById(int postId)
         {
-            var posts = await _postRepository.GetAll();
-            var post = posts?.FirstOrDefault(p => p.Id == postId);
-            if (post is null) throw new Exception($"The post is not found with \"{postId}\"");
+            var post = await _postRepository.GetById(postId);
             return post.ParseToModel();
         }
 
-
-        // These method is relevant to user and blog
-        public async Task<List<PostDto>> GetAllPosts(Guid userId, int blogId)
+        // Muayyan blogga tegishli postlar - to'g'ridan-to'g'ri SQL so'rov bilan (samarali)
+        public async Task<List<PostDto>> GetBlogPosts(Guid userId, int blogId)
         {
-            var posts = await FilteredPosts(userId, blogId);
+            await _blogService.GetOwnedBlog(userId, blogId);
+            var posts = await _postRepository.GetByBlogId(blogId);
             return posts.ParseModels();
         }
 
-
-
-        public async Task<PostDto> GetPostById(Guid userId, int blogId, int postId)
+        public async Task<PostDto> GetBlogPostById(Guid userId, int blogId, int postId)
         {
-            var post = await CheckPost(userId, blogId, postId);
+            var post = await CheckPostBelongsToBlog(userId, blogId, postId);
             return post.ParseToModel();
         }
 
         public async Task<PostDto> AddPost(Guid userId, int blogId, CreatePostModel model)
         {
-            var user = await CheckUser(userId);
-            await CheckBlog(userId, blogId);
+            var user = await _userRepository.GetById(userId);
+            await _blogService.GetOwnedBlog(userId, blogId);
 
-            var post = new Post()
+            var post = new Post
             {
                 Title = model.Title,
                 Content = model.Content,
@@ -67,56 +65,39 @@ namespace Blog.Services.Api
 
         public async Task<PostDto> UpdatePost(Guid userId, int blogId, int postId, UpdatePostModel model)
         {
-            var post = await CheckPost(userId, blogId, postId);
-            var check = false;
+            var post = await CheckPostBelongsToBlog(userId, blogId, postId);
+            var changed = false;
+
             if (!string.IsNullOrWhiteSpace(model.Title))
             {
                 post.Title = model.Title;
-                check = true;
+                changed = true;
             }
 
             if (!string.IsNullOrWhiteSpace(model.Content))
             {
                 post.Content = model.Content;
-                check = true;
+                changed = true;
             }
-            if (check)
-                await _postRepository.Update(post);
+
+            if (changed) await _postRepository.Update(post);
             return post.ParseToModel();
         }
 
         public async Task<string> DeletePost(Guid userId, int blogId, int postId)
         {
-            var post = await CheckPost(userId, blogId, postId);
+            var post = await CheckPostBelongsToBlog(userId, blogId, postId);
             await _postRepository.DeleteById(post);
-            return "Deleted successfully";
-        }
-        private async Task<List<Post>?> FilteredPosts(Guid userId, int blogId)
-        {
-            var blog = await CheckBlog(userId, blogId);
-            var filteredPosts = blog.Posts?.Where(post => post.Id == blogId).ToList();
-            return filteredPosts;
+            return "Post muvaffaqiyatli o'chirildi";
         }
 
-        private async Task<User> CheckUser(Guid userId)
+        // Blog userId'ga tegishli ekanligini, keyin post shu blogId'ga tegishli ekanligini tekshiradi.
+        private async Task<Post> CheckPostBelongsToBlog(Guid userId, int blogId, int postId)
         {
-            var user = await _userRepository.GetById(userId);
-            return user;
-        }
-
-        private async Task<Blog.Data.Entities.Blog> CheckBlog(Guid userId, int blogId)
-        {
-            var user = await CheckUser(userId);
-            var blog = user.Blogs?.FirstOrDefault(blog => blog.Id == blogId);
-            if (blog is null) throw new Exception($"Not found blog with \"{blogId}\"");
-            return blog;
-        }
-
-        private async Task<Post> CheckPost(Guid userId, int blogId, int postId)
-        {
-            var blog = await CheckBlog(userId, blogId);
-            var post = blog.Posts?.FirstOrDefault(p => p.Id == postId);
-            if (post is null) throw new Exception($"The post is not found with \"{postId}\"");
+            await _blogService.GetOwnedBlog(userId, blogId);
+            var post = await _postRepository.GetById(postId);
+            if (post.BlogId != blogId)
+                throw new NotFoundException($"\"{blogId}\" IDli blog ichida \"{postId}\" IDli post topilmadi");
             return post;
         }
     }

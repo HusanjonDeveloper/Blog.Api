@@ -1,4 +1,5 @@
-﻿using Blog.Data.Context;
+using Blog.Common.Exceptions;
+using Blog.Data.Context;
 using Blog.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,13 +7,6 @@ namespace Blog.Data.Repositories
 {
     public class UserRepository : IUserRepository
     {
-        // GetAll
-        // GetById
-        // GetByUserName
-        //Add
-        // Update
-        // Delete
-
         private readonly BlogDbContext _context;
 
         public UserRepository(BlogDbContext context)
@@ -20,23 +14,24 @@ namespace Blog.Data.Repositories
             _context = context;
         }
 
-        public async Task<List<User>?> GetAll()
+        public async Task<List<User>> GetAll()
         {
-            var users = await _context.Users.ToListAsync();
-            return users;
+            return await _context.Users.AsNoTracking().ToListAsync();
         }
 
         public async Task<User> GetById(Guid id)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
-            if (user is null) throw new Exception("User not found");
+            if (user is null) throw new NotFoundException($"\"{id}\" identifikatorli foydalanuvchi topilmadi");
             return user;
         }
 
         public async Task<User?> GetByUsername(string username)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username.ToLower());
-            return user;
+            // Username har doim kichik harfda saqlanadi (UserService.AddUser'da),
+            // shuning uchun qidiruvda ham kichik harfga o'tkazamiz - katta/kichik harf farqi bo'lmaydi.
+            var normalized = username.ToLower();
+            return await _context.Users.FirstOrDefaultAsync(u => u.Username == normalized);
         }
 
         public async Task Add(User user)
@@ -56,6 +51,5 @@ namespace Blog.Data.Repositories
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
         }
-
     }
 }

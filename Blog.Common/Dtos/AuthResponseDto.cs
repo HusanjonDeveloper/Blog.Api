@@ -1,4 +1,4 @@
-﻿namespace Blog.Common.Dtos
+namespace Blog.Common.Dtos
 {
     // Login va Register endpointlari shu obyektni qaytaradi.
     // Frontend token bilan birga userId/username'ni ham darhol oladi,

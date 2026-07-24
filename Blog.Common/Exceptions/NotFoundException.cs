@@ -1,4 +1,6 @@
-﻿namespace Blog.Common.Exceptions;
+using Exception = System.Exception;
+
+namespace Blog.Common.Exceptions;
 
 // Resurs (User, Blog, Post) topilmaganda shu exception tashlanadi.
 // Global middleware buni HTTP 404 statusiga aylantiradi.
